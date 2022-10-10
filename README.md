@@ -84,8 +84,13 @@ optional arguments:
 
 ## Packaging
 
+Note: Update version first
+
 ```shell
- python3 setup.py bdist_wheel
+python3 -m venv venv/kp2bw &&\
+source venv/kp2bw/bin/activate &&\
+pip install . &&\
+python3 setup.py bdist_wheel
 ```
 
 ## Troubleshooting

@@ -29,7 +29,7 @@ class BitwardenClient():
             raise Exception("Could not sync the local state to your Bitwarden server")
 
         # get folder list
-        self._folders = {folder["name"]: folder["id"] for folder in json.loads(self._exec_with_session("bw list folders"))}
+        self._folders = {folder["name"]: folder["id"] for folder in json.loads(self._exec_with_session("bw list folders --organizationid {self._orgId}"))}
 
         # get existing entries
         self._folder_entries = self._get_existing_folder_entries()
@@ -64,7 +64,7 @@ class BitwardenClient():
 
     def _get_existing_folder_entries(self):
         folder_id_lookup_helper = {folder_id: folder_name for folder_name,folder_id in self._folders.items()}
-        items = json.loads(self._exec_with_session("bw list items"))
+        items = json.loads(self._exec_with_session("bw list items --organizationid {self._orgId}"))
         
         # fix None folderIds for entries without folders
         for item in items:
@@ -94,7 +94,7 @@ class BitwardenClient():
         data = {"name": folder }
         data_b64 = base64.b64encode(json.dumps(data).encode("UTF-8")).decode("UTF-8")
 
-        output = self._exec_with_session(f'{self._get_platform_dependent_echo_str(data_b64)} | bw create folder')
+        output = self._exec_with_session(f'{self._get_platform_dependent_echo_str(data_b64)} | bw create folder --organizationid {self._orgId}')
 
         output_obj = json.loads(output)
 
@@ -118,7 +118,7 @@ class BitwardenClient():
         # convert string to base64
         json_b64 = base64.b64encode(json_str.encode("UTF-8")).decode("UTF-8")
 
-        output = self._exec_with_session(f'{self._get_platform_dependent_echo_str(json_b64)} | bw create item')
+        output = self._exec_with_session(f'{self._get_platform_dependent_echo_str(json_b64)} | bw create item --organizationid {self._orgId}')
 
         return output
 
@@ -144,7 +144,7 @@ class BitwardenClient():
             f.write(data)
         
         try:
-            output = self._exec_with_session(f'bw create attachment --file "{path_to_file_on_disk}" --itemid {item_id}')
+            output = self._exec_with_session(f'bw create attachment --file "{path_to_file_on_disk}" --itemid {item_id} --organizationid {self._orgId}')
         finally:
             os.remove(path_to_file_on_disk)
         

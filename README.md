@@ -31,13 +31,13 @@ This tool helps to convert existing KeePass databases to Bitwarden accounts. It 
 1) Clone / download this repository and enter the directory.
 1) Create a new python venv and activate it
   ```
-  python -m venv .env/kp2bw
+  python3 -m venv venv/kp2bw
 
   Windows:
   .env\kp2bw\Scripts\activate
   
   Linux:
-  .env/kp2bw/bin/activate
+  source venv/kp2bw/bin/activate
   ```
 1) pip install .
 
@@ -75,6 +75,12 @@ optional arguments:
   -bwpw BW_PW       Bitwarden Password
   -y                Skips the confirm bw installation question
   -v                Verbose output
+```
+
+## Packaging
+
+```shell
+ python3 setup.py bdist_wheel
 ```
 
 ## Troubleshooting

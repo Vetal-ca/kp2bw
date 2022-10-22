@@ -12,7 +12,7 @@ MAX_BW_ITEM_LENGTH = 10 * 1000
 
 class Converter():
     def __init__(self, keepass_file_path, keepass_password, keepass_keyfile_path, bitwarden_password,
-            bitwarden_organization_id, bitwarden_coll_id, path2name, path2nameskip):
+            bitwarden_organization_id, bitwarden_coll_id, path2name, path2nameskip, path_prefix):
         self._keepass_file_path = keepass_file_path
         self._keepass_password = keepass_password
         self._keepass_keyfile_path = keepass_keyfile_path
@@ -21,6 +21,7 @@ class Converter():
         self._bitwarden_coll_id = bitwarden_coll_id
         self._path2name = path2name
         self._path2nameskip = path2nameskip
+        self._path_prefix = path_prefix
 
         self._kp_ref_entries = []
         self._entries = {}
@@ -232,6 +233,7 @@ class Converter():
             else:
                 (folder, bw_item_object, attachments) = value
 
+            folder = self._path_prefix + folder
             # collection
             collectionId = None
             collInfo=""

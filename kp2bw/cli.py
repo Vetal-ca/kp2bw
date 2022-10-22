@@ -21,6 +21,7 @@ def _argparser():
     parser.add_argument('-bwpw', dest='bw_pw', help='Bitwarden password', default=None)
     parser.add_argument('-bworg', dest='bw_org', help='Bitwarden Organization Id', default=None)
     parser.add_argument('-bwcoll', dest='bw_coll', help='Id of Org-Collection, or \'auto\' to use name from toplevel-folders', default=None)
+    parser.add_argument('-pathprefix', dest='bw_path_prefix', help='Prefix all paths with that' , default="")
     parser.add_argument('-path2name', dest='path2name', help='Prepend folderpath of entries to each name',
                         action="store_const", const=True, default=True),
     parser.add_argument('-path2nameskip', dest='path2nameskip', help='Skip first X folders for path2name (default: 1)',
@@ -81,6 +82,7 @@ def main():
         bitwarden_coll_id=args.bw_coll,
         path2name=args.path2name,
         path2nameskip=args.path2nameskip,
+        path_prefix=args.bw_path_prefix
         )
     c.convert()
 

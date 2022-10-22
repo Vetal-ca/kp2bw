@@ -108,7 +108,7 @@ class BitwardenClient():
 
         # create folder if exists
         if folder:
-            self.create_folder(folder)
+            self.create_folders(folder)
 
             # set id
             entry["folderId"] = self._folders[folder]
@@ -121,6 +121,16 @@ class BitwardenClient():
         output = self._exec_with_session(f'{self._get_platform_dependent_echo_str(json_b64)} | bw create item --organizationid {self._orgId}')
 
         return output
+
+    # Create folder and all prefixes
+    def create_folders(self, folder):
+        folder_split = folder.split('/')
+        if len(folder_split) > 1:
+            # recursively create parent folders
+            parent = '/'.join(folder_split[:-1])
+            self.create_folders(parent)
+        # Once parent folders created, time to create this folder
+        self.create_folder(folder)
 
     def create_attachment(self, item_id, attachment):
         # store attachment on disk

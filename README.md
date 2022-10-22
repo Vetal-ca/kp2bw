@@ -75,6 +75,7 @@ optional arguments:
   -bwpw BW_PW       Bitwarden Password
   -bworg BW_OrgId   Id of Organization to Upload Into
   -bwcoll BW_CollId Id of Org-Collection, or 'auto' to use name from toplevel-folders
+  -pathprefix prefix Prepend all paths with that
   -path2name        Prepend folderpath of entries to each name
   -path2nameskip PATH2NAMESKIP
                     Skip first X folders for path2name (default: 1)

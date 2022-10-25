@@ -12,21 +12,21 @@ class BitwardenClient():
     TEMPORARY_ATTACHMENT_FOLDER = "attachment-temp"
 
     def __init__(self, password, orgId):
+
         # check for bw cli installation
-        if not "bitwarden" in self._exec("bw"):
-            raise Exception("Bitwarden Cli not installed! See https://help.bitwarden.com/article/cli/#download--install for help")
-        
+        self._exec("bw --help", error_hint="Bitwarden Cli not installed! See "
+                                           "https://help.bitwarden.com/article/cli/#download--install for help")
+
         # save org
         self._orgId = orgId
 
         # login
-        self._key = self._exec(f"bw unlock {password} --raw")
-        if "error" in self._key:
-            raise Exception("Could not unlock the Bitwarden db. Is the Master Password correct and are bw cli tools set up correctly?")
+        self._key = self._exec(f"bw unlock {password} --raw",
+                               error_hint="Could not unlock the Bitwarden db. Is right user logged in? Is the Master Password "
+                                          "correct and are bw cli tools set up correctly?")
 
         # make sure data is up to date
-        if not "Syncing complete." in self._exec_with_session("bw sync"):
-            raise Exception("Could not sync the local state to your Bitwarden server")
+        self._exec_with_session("bw sync", error_hint="Could not sync the local state to your Bitwarden server")
 
         # get folder list
         self._folders = {folder["name"]: folder["id"] for folder in json.loads(self._exec_with_session("bw list folders --organizationid {self._orgId}"))}
@@ -36,7 +36,8 @@ class BitwardenClient():
 
         # get existing collections
         if orgId:
-            self._colls = {coll["name"]: coll["id"] for coll in json.loads(self._exec_with_session(f"bw list org-collections --organizationid {orgId}"))}
+            self._colls = {coll["name"]: coll["id"] for coll in
+                           json.loads(self._exec_with_session(f"bw list org-collections --organizationid {orgId}"))}
         else:
             self._colls = None
 
@@ -52,31 +53,35 @@ class BitwardenClient():
         if os.path.isdir(self.TEMPORARY_ATTACHMENT_FOLDER):
             shutil.rmtree(self.TEMPORARY_ATTACHMENT_FOLDER)
 
-    def _exec(self, command):
+    def _exec(self, command, error_hint: str = None) -> str:
         try:
             logging.debug(f"-- Executing command: {command}")
             output = check_output(command, stderr=STDOUT, shell=True)
         except CalledProcessError as e:
-            output = e.output
-        
+            output = str(e.output.decode("utf-8", "ignore"))
+            logging.debug(f"  |- Output: {output}")
+            err = "{}\n{}".format(error_hint, output) if error_hint else output
+            raise Exception(err)
+
         logging.debug(f"  |- Output: {output}")
-        return str(output.decode("utf-8","ignore"))
+        return str(output.decode("utf-8", "ignore"))
 
     def _get_existing_folder_entries(self):
-        folder_id_lookup_helper = {folder_id: folder_name for folder_name,folder_id in self._folders.items()}
+        folder_id_lookup_helper = {folder_id: folder_name for folder_name, folder_id in self._folders.items()}
         items = json.loads(self._exec_with_session("bw list items --organizationid {self._orgId}"))
-        
+
         # fix None folderIds for entries without folders
         for item in items:
             if not item['folderId']:
                 item['folderId'] = ''
 
         items.sort(key=lambda item: item["folderId"])
-        return {folder_id_lookup_helper[folder_id] if folder_id in folder_id_lookup_helper else None: [entry["name"] for entry in entries] 
-            for folder_id, entries in groupby(items, key=lambda item: item["folderId"])}
+        return {folder_id_lookup_helper[folder_id] if folder_id in folder_id_lookup_helper else None: [entry["name"] for
+                                                                                                       entry in entries]
+                for folder_id, entries in groupby(items, key=lambda item: item["folderId"])}
 
-    def _exec_with_session(self, command):
-        return self._exec(f"{command} --session '{self._key}'")
+    def _exec_with_session(self, command, error_hint: str = None) -> str:
+        return self._exec(f"{command} --session '{self._key}'", error_hint=error_hint)
 
     def has_folder(self, folder):
         return folder in self._folders
@@ -91,14 +96,25 @@ class BitwardenClient():
         if not folder or self.has_folder(folder):
             return
 
-        data = {"name": folder }
+        data = {"name": folder}
         data_b64 = base64.b64encode(json.dumps(data).encode("UTF-8")).decode("UTF-8")
 
-        output = self._exec_with_session(f'{self._get_platform_dependent_echo_str(data_b64)} | bw create folder --organizationid {self._orgId}')
+        output = self._exec_with_session(
+            f'{self._get_platform_dependent_echo_str(data_b64)} | bw create folder')
 
         output_obj = json.loads(output)
 
         self._folders[output_obj["name"]] = output_obj["id"]
+
+    # Create folder and all prefixes
+    def create_folders(self, folder):
+        folder_split = folder.split('/')
+        if len(folder_split) > 1:
+            # recursively create parent folders
+            parent = '/'.join(folder_split[:-1])
+            self.create_folders(parent)
+        # Once parent folders created, time to create this folder
+        self._create_folder(folder)
 
     def create_entry(self, folder, entry):
         # check if already exists
@@ -118,19 +134,11 @@ class BitwardenClient():
         # convert string to base64
         json_b64 = base64.b64encode(json_str.encode("UTF-8")).decode("UTF-8")
 
-        output = self._exec_with_session(f'{self._get_platform_dependent_echo_str(json_b64)} | bw create item --organizationid {self._orgId}')
+        output = self._exec_with_session(
+            f'{self._get_platform_dependent_echo_str(json_b64)} | bw create item --organizationid {self._orgId}')
 
         return output
 
-    # Create folder and all prefixes
-    def create_folders(self, folder):
-        folder_split = folder.split('/')
-        if len(folder_split) > 1:
-            # recursively create parent folders
-            parent = '/'.join(folder_split[:-1])
-            self.create_folders(parent)
-        # Once parent folders created, time to create this folder
-        self.create_folder(folder)
 
     def create_attachment(self, item_id, attachment):
         # store attachment on disk
@@ -152,12 +160,13 @@ class BitwardenClient():
         path_to_file_on_disk = os.path.join(self.TEMPORARY_ATTACHMENT_FOLDER, filename)
         with open(path_to_file_on_disk, "wb") as f:
             f.write(data)
-        
+
         try:
-            output = self._exec_with_session(f'bw create attachment --file "{path_to_file_on_disk}" --itemid {item_id} --organizationid {self._orgId}')
+            output = self._exec_with_session(
+                f'bw create attachment --file "{path_to_file_on_disk}" --itemid {item_id} --organizationid {self._orgId}')
         finally:
             os.remove(path_to_file_on_disk)
-        
+
         return output
 
     def create_org_get_collection(self, collectionname):
@@ -175,19 +184,19 @@ class BitwardenClient():
         entry['name'] = collectionname
         entry['organizationId'] = self._orgId
 
-
         json_str = json.dumps(entry)
 
         # convert string to base64
         json_b64 = base64.b64encode(json_str.encode("UTF-8")).decode("UTF-8")
 
-        output = self._exec_with_session(f'{self._get_platform_dependent_echo_str(json_b64)} | bw create  org-collection --organizationid {self._orgId}')
+        output = self._exec_with_session(
+            f'{self._get_platform_dependent_echo_str(json_b64)} | bw create  org-collection --organizationid {self._orgId}')
         if (not output): return None
         data = json.loads(output)
         if (not data["id"]): return None
         newCollId = data["id"]
 
-        #store in cache
+        # store in cache
         self._colls[collectionname] = newCollId
 
         return newCollId

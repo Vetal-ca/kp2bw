@@ -10,17 +10,16 @@ from .bitwardenclient import BitwardenClient
 KP_REF_IDENTIFIER = "{REF:"
 MAX_BW_ITEM_LENGTH = 10 * 1000
 
+
 class Converter():
     def __init__(self, keepass_file_path, keepass_password, keepass_keyfile_path, bitwarden_password,
-            bitwarden_organization_id, bitwarden_coll_id, path2name, path2nameskip, path_prefix):
+                 bitwarden_organization_id, bitwarden_coll_id, path_prefix):
         self._keepass_file_path = keepass_file_path
         self._keepass_password = keepass_password
         self._keepass_keyfile_path = keepass_keyfile_path
         self._bitwarden_password = bitwarden_password
         self._bitwarden_organization_id = bitwarden_organization_id
         self._bitwarden_coll_id = bitwarden_coll_id
-        self._path2name = path2name
-        self._path2nameskip = path2nameskip
         self._path_prefix = path_prefix
 
         self._kp_ref_entries = []
@@ -31,23 +30,25 @@ class Converter():
             "password": "P"
         }
 
-    def _create_bw_python_object(self, title, notes, url, totp, username, password, custom_properties, collectionId, firstlevel):
+    def _create_bw_python_object(self, title, notes, url, totp, username, password, custom_properties, collectionId,
+                                 firstlevel):
         return {
             "organizationId": self._bitwarden_organization_id,
             "collectionIds": collectionId,
             "firstlevel": firstlevel,
             "folderId": None,
-            "type":1,
+            "type": 1,
             "name": title,
-            "notes":notes,
-            "favorite":False,
-            "fields":[{"name": key,"value": value,"type":0} for key, value in custom_properties.items() if value is not None and len(value) <= MAX_BW_ITEM_LENGTH],
+            "notes": notes,
+            "favorite": False,
+            "fields": [{"name": key, "value": value, "type": 0} for key, value in custom_properties.items() if
+                       value is not None and len(value) <= MAX_BW_ITEM_LENGTH],
             "login": {
-                "uris":[
-                    {"match": None,"uri": url}
+                "uris": [
+                    {"match": None, "uri": url}
                 ] if url else [],
                 "username": username,
-                "password":password,
+                "password": password,
                 "totp": totp,
                 "passwordRevisionDate": None
             },
@@ -62,14 +63,13 @@ class Converter():
         else:
             return "/".join(entry.group.path)
 
-    
     def _generate_prefix(self, entry, skip):
         if not entry.group.path or entry.group.path == "/":
             return None
         else:
-            out=""
+            out = ""
             for item in islice(entry.group.path, skip, None):
-                out += item +  ' / '
+                out += item + ' / '
             return out
 
     def _get_folder_firstlevel(self, entry):
@@ -82,24 +82,21 @@ class Converter():
 
         folder = self._generate_folder_name(entry)
         prefix = ""
-        if folder and self._path2name:
-            prefix = self._generate_prefix(entry, self._path2nameskip)
-
         bw_item_object = self._create_bw_python_object(
-            title = prefix + entry.title if entry.title else prefix + '_untitled',
-            notes =  entry.notes if entry.notes and len(entry.notes) <= MAX_BW_ITEM_LENGTH else '',
-            url = entry.url if entry.url else '',
-            totp = entry.otp if entry.otp else '',
-            username = entry.username if entry.username else '',
-            password = entry.password if entry.password else '',
-            custom_properties = entry.custom_properties,
-            collectionId = self._bitwarden_coll_id,
-            firstlevel = self._get_folder_firstlevel(entry)
+            title=prefix + entry.title if entry.title else prefix + '_untitled',
+            notes=entry.notes if entry.notes and len(entry.notes) <= MAX_BW_ITEM_LENGTH else '',
+            url=entry.url if entry.url else '',
+            totp=entry.otp if entry.otp else '',
+            username=entry.username if entry.username else '',
+            password=entry.password if entry.password else '',
+            custom_properties=entry.custom_properties,
+            collectionId=self._bitwarden_coll_id,
+            firstlevel=self._get_folder_firstlevel(entry)
         )
 
-
         # get attachments to store later on
-        attachments = [(key, value) for key,value in entry.custom_properties.items() if value is not None and len(value) > MAX_BW_ITEM_LENGTH]
+        attachments = [(key, value) for key, value in entry.custom_properties.items() if
+                       value is not None and len(value) > MAX_BW_ITEM_LENGTH]
 
         if entry.notes and len(entry.notes) > MAX_BW_ITEM_LENGTH:
             attachments.append(("notes", entry.notes))
@@ -185,7 +182,8 @@ class Converter():
                 replaced_entries = []
                 for member in self._member_reference_resolving_dict.keys():
                     if KP_REF_IDENTIFIER in getattr(kp_entry, member):
-                        field_referenced, lookup_mode, ref_compare_string = self._parse_kp_ref_string(getattr(kp_entry, member))
+                        field_referenced, lookup_mode, ref_compare_string = self._parse_kp_ref_string(
+                            getattr(kp_entry, member))
                         folder, ref_entry = self._get_referenced_entry(lookup_mode, ref_compare_string)
 
                         value = self._find_referenced_value(ref_entry, field_referenced)
@@ -196,19 +194,21 @@ class Converter():
                 # handle storing bitwarden style
                 username_and_password_match = True
                 for ref_entry in replaced_entries:
-                    if ref_entry["login"]["username"] != kp_entry.username or ref_entry["login"]["password"] != kp_entry.password:
+                    if ref_entry["login"]["username"] != kp_entry.username or ref_entry["login"][
+                        "password"] != kp_entry.password:
                         username_and_password_match = False
                         break
 
                 if username_and_password_match:
                     # => add url to bw_item => username / pw identical
-                    ref_entry["login"]["uris"].append({"match": None,"uri": kp_entry.url})
+                    ref_entry["login"]["uris"].append({"match": None, "uri": kp_entry.url})
                 else:
                     # => create new bitwarden item
                     self._add_bw_entry_to_entires_dict(kp_entry)
 
             except Exception as e:
-                logging.warning(f"!! Could not resolve entry for {kp_entry.group.path}{kp_entry.title} [{str(kp_entry.uuid)}] !!")
+                logging.warning(
+                    f"!! Could not resolve entry for {kp_entry.group.path}{kp_entry.title} [{str(kp_entry.uuid)}] !!")
 
         logging.debug(f"Resolved {ref_entries_length} REF entries")
 
@@ -220,10 +220,8 @@ class Converter():
 
         bw = BitwardenClient(self._bitwarden_password, self._bitwarden_organization_id)
 
-        #if self._bitwarden_coll_id == 'auto':
-            # lookup collections
-            
-
+        # if self._bitwarden_coll_id == 'auto':
+        # lookup collections
 
         for kp_id, value in self._entries.items():
 
@@ -236,23 +234,23 @@ class Converter():
             folder = self._path_prefix + folder
             # collection
             collectionId = None
-            collInfo=""
+            collInfo = ""
             if bw_item_object["firstlevel"]:
                 if self._bitwarden_coll_id == 'auto':
                     logging.info(f"Searching Collection {bw_item_object['firstlevel']}")
                     collectionId = bw.create_org_get_collection(bw_item_object['firstlevel'])
-                    collInfo=" in specified Collection " + bw_item_object['firstlevel']
+                    collInfo = " in specified Collection " + bw_item_object['firstlevel']
 
                 elif self._bitwarden_coll_id:
                     collectionId = self._bitwarden_coll_id
-                    collInfo=" in specified Collection "
-                
-            
+                    collInfo = " in specified Collection "
+
             # update object
             del bw_item_object["firstlevel"]
             bw_item_object["collectionIds"] = collectionId
-            
-            logging.info(f"[{i} of {max_i}] Creating Bitwarden entry in {folder} for {bw_item_object['name']}{collInfo}...")
+
+            logging.info(
+                f"[{i} of {max_i}] Creating Bitwarden entry in {folder} for {bw_item_object['name']}{collInfo}...")
 
             # create entry
             output = bw.create_entry(folder, bw_item_object)
@@ -276,7 +274,6 @@ class Converter():
 
             i += 1
 
-
     def convert(self):
         # load keepass data from database
         self._load_keepass_data()
@@ -286,4 +283,3 @@ class Converter():
 
         # store aggregated entries in bw
         self._create_bitwarden_items_for_entries()
-

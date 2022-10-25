@@ -11,31 +11,47 @@ usage ()
     exit 1
 }
 
-# Create folder, from parent to current.
-# $1 - array of path elements
-# $2 - path -> id, associative array to put result to
-create_folder_recursive () {
-  local -n path_elements=$1
-  local -n ret1=$2
-  len=${#path_elements[@]}
-  if [ $len > 1 ]; then
-    # create parents, recursive
-    create_folder_recursive ${path_elements[@]::${len-1} ret1
-  fi
+print_array ()
+{
+  local -n arr=$1
+  for i in "${!arr[@]}"
+do
+  echo "\"${i}\"=\"${arr[$i]}\""
+done
+
 }
 
 # Create folders, from parent to current.
 # $1 - path
-# $2 - path -> id, associative array to put result to
+# $2 - session
+# $3 - path -> id, associative array to put result to
 create_folders ()
 {
-  # https://stackoverflow.com/questions/40156874/bash-pass-arrays-to-function
-  # https://stackoverflow.com/questions/4069188/how-to-pass-an-associative-array-as-argument-to-a-function-in-bash
-  local -n ret=$2
-  echo "Creating folders line, \"$1\""
-  local folder_parts
-  IFS='/' read -ra folder_parts <<< "$1"
-  create_folder_recursive folder_parts ret
+  local path=$1
+  local login_session=$2
+  local -n ret_val=$3
+
+  local prefix
+
+  if [[ "${path}" =~ \/ ]]; then
+    # Multiple parts
+    prefix=${path%/*}
+    #suffix=${path##*/}
+    create_folders "${prefix}" "${login_session}" $3
+  fi
+
+  local existing="${ret_val["${path}"]-}"
+
+  if [ -z "${existing}" ]; then
+    echo "Creating folder \"${path}\""
+
+    data=$(jq -n --arg name "${path}" '{"name":$name}' | base64 --wrap=0)
+    ret=$(bw create folder --session "${login_session}" "${data}")
+    id=$(echo "${ret}" | jq -r '.id')
+
+    # shellcheck disable=SC2034
+    ret_val[${path}]="${id}"
+  fi
 }
 
 
@@ -106,16 +122,6 @@ fi
 # 2. Create folders
 # 3. Move items
 
-declare -A ret
-
-create_folders  "one/two/three" ret
-
-for i in "${!ret[@]}"
-do
-  echo "\"${i}\"=\"${folder_to_id[$i]}\""
-done
-
-exit 0
 echo "Source user, login"
 bw logout || true
 session=$(bw login "${src_user}" "${src_pass}" --raw)
@@ -145,7 +151,7 @@ bw logout
 session=$(bw login "${dst_user}" "${dst_pass}" --raw)
 
 # Destination user folders, path -> id
-declare -A folder_to_id
+declare -A folder_to_id=()
 
 echo "Retrieving target user, existing folders"
 dst_folders=$(bw list folders --session "${session}" | jq -rc '.[] | select(.id != null) | {path: .name, id}')
@@ -154,23 +160,39 @@ dst_folders=$(bw list folders --session "${session}" | jq -rc '.[] | select(.id 
 # shopt -s lastpipe
 
 # https://stackoverflow.com/questions/2376031/reading-multiple-lines-in-bash-without-spawning-a-new-subshell
-while read -r f; do
-  path=$(echo "${f}" | jq -r '.path')
-  id=$(echo "${f}" | jq -r '.id')
-  folder_to_id["${path}"]="${id}"
-done < <(echo "${dst_folders}")
+if [ -n "${dst_folders}" ]; then
+  while read -r f; do
+    path=$(echo "${f}" | jq -r '.path')
+    id=$(echo "${f}" | jq -r '.id')
+    folder_to_id["${path}"]="${id}"
+  done < <(echo "${dst_folders}")
+fi
 
 echo "Recreating org folders ..."
+while read -r f; do
+  path=$(echo "${f}" | jq -r '.path')
+  create_folders "${path}" "${session}" folder_to_id
+done < <(echo "${src_item_folder}" | jq -rc '.[]')
+
+echo "Distributing items to folder ..."
+bw sync --force --session "${session}"
 while read -r f; do
   path=$(echo "${f}" | jq -r '.path')
   id=$(echo "${f}" | jq -r '.id')
   name=$(echo "${f}" | jq -r '.name')
 
-done < <(echo "${src_item_folder}")
+  echo "Moving item \"${name}\" to folder \"${path}\""
+  folder_id=${folder_to_id["${path}"]}
+  data=$(jq -n --arg fid "${folder_id}" '{"folderId":$fid}' | base64 --wrap=0)
+#  echo "${data}" | base64 --decode | jq
+  #bw get item --session "${session}" "${name}"
+  echo bw edit item --organizationid "${org_id}" --session "${session}" "${id}" "${data}"
+  break
 
-#for i in "${!folder_to_id[@]}"
-#do
-#  echo "\"${i}\"=\"${folder_to_id[$i]}\""
-#done
+done < <(echo "${src_item_folder}" | jq -rc '.[]')
+
+
+echo "Done!"
+#print_array folder_to_id
 
 

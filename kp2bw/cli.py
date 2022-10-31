@@ -1,9 +1,9 @@
-
 import getpass
 import logging
 import sys
 from argparse import ArgumentParser
 from .convert import Converter
+
 
 class MyArgParser(ArgumentParser):
     def error(self, message):
@@ -19,6 +19,7 @@ def _argparser():
     parser.add_argument('-kppw', dest='kp_pw', help='KeePass db password', default=None)
     parser.add_argument('-kpkf', dest='kp_keyfile', help='KeePass db key file', default=None)
     parser.add_argument('-bwpw', dest='bw_pw', help='Bitwarden password', default=None)
+    parser.add_argument('-bworg', dest='bworg', help='Organization name', default=None)
     parser.add_argument('-y', dest='skip_confirm', help='Skips the confirm bw installation question',
                         action="store_const", const=True, default=False)
     parser.add_argument('-v', dest='verbose', help='Verbose output', action="store_const", const=True, default=False)
@@ -31,6 +32,7 @@ def _read_password(arg, prompt):
         arg = getpass.getpass(prompt=prompt)
 
     return arg
+
 
 def main():
     args = _argparser().parse_args()
@@ -65,11 +67,14 @@ def main():
         keepass_file_path=args.keepass_file,
         keepass_password=kp_pw,
         keepass_keyfile_path=args.kp_keyfile,
-        bitwarden_password=bw_pw)
+        bitwarden_password=bw_pw,
+        bitwarden_org=args.bworg
+    )
     c.convert()
 
     print(" ")
     print("All done.")
+
 
 if __name__ == "__main__":
     main()

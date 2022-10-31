@@ -1,20 +1,34 @@
 import json
 import logging
 
-from enum import Enum
 from pykeepass import PyKeePass
 
-from .bitwardenclient import BitwardenClient
+from .bitwardenclient import BitwardenClientOrg, BitwardenClientPrivate
 
 KP_REF_IDENTIFIER = "{REF:"
 MAX_BW_ITEM_LENGTH = 10 * 1000
 
+
+def _parse_kp_ref_string(ref_string):
+    # {REF:U@I:CFC0141068E83547BCEEAF0C1ADABAE0}
+    tokens = ref_string.split(":")
+
+    if len(tokens) != 3:
+        raise Exception("Invalid REF string found")
+
+    ref_compare_string = tokens[2][:-1]
+    field_referenced, lookup_mode = tokens[1].split("@")
+
+    return (field_referenced, lookup_mode, ref_compare_string)
+
+
 class Converter():
-    def __init__(self, keepass_file_path, keepass_password, keepass_keyfile_path, bitwarden_password):
+    def __init__(self, keepass_file_path, keepass_password, keepass_keyfile_path, bitwarden_password, bitwarden_org):
         self._keepass_file_path = keepass_file_path
         self._keepass_password = keepass_password
         self._keepass_keyfile_path = keepass_keyfile_path
         self._bitwarden_password = bitwarden_password
+        self._bitwarden_org = bitwarden_org
 
         self._kp_ref_entries = []
         self._entries = {}
@@ -79,18 +93,6 @@ class Converter():
         else:
             self._entries[str(entry.uuid).replace("-", "").upper()] = (folder, bw_item_object)
 
-    def _parse_kp_ref_string(self, ref_string):
-        # {REF:U@I:CFC0141068E83547BCEEAF0C1ADABAE0}
-        tokens = ref_string.split(":")
-
-        if len(tokens) != 3:
-            raise Exception("Invalid REF string found")
-
-        ref_compare_string = tokens[2][:-1]
-        field_referenced, lookup_mode = tokens[1].split("@")
-
-        return (field_referenced, lookup_mode, ref_compare_string)
-
     def _get_referenced_entry(self, lookup_mode, ref_compare_string):
         if lookup_mode == "I":
             # KP_ID lookup
@@ -153,7 +155,7 @@ class Converter():
                 replaced_entries = []
                 for member in self._member_reference_resolving_dict.keys():
                     if KP_REF_IDENTIFIER in getattr(kp_entry, member):
-                        field_referenced, lookup_mode, ref_compare_string = self._parse_kp_ref_string(getattr(kp_entry, member))
+                        field_referenced, lookup_mode, ref_compare_string = _parse_kp_ref_string(getattr(kp_entry, member))
                         folder, ref_entry = self._get_referenced_entry(lookup_mode, ref_compare_string)
 
                         value = self._find_referenced_value(ref_entry, field_referenced)
@@ -183,23 +185,27 @@ class Converter():
     def _create_bitwarden_items_for_entries(self):
         i = 1
         max_i = len(self._entries)
+        if self._bitwarden_org:
+            bw = BitwardenClientOrg(self._bitwarden_password, self._bitwarden_org)
+        else:
+            bw = BitwardenClientPrivate(self._bitwarden_password)
 
-        bw = BitwardenClient(self._bitwarden_password)
         for kp_id, value in self._entries.items():
             if len(value) == 2:
-                (folder, bw_item_object) = value
+                (container, bw_item_object) = value
                 attachments = None
             else:
-                (folder, bw_item_object, attachments) = value
+                (container, bw_item_object, attachments) = value
 
-            logging.info(f"[{i} of {max_i}] Creating Bitwarden entry in {folder} for {bw_item_object['name']}...")
+            logging.info(f"[{i} of {max_i}] Creating Bitwarden entry in {container} for {bw_item_object['name']}...")
 
             # create entry
-            output = bw.create_entry(folder, bw_item_object)
+            output = bw.create_entry(container, bw_item_object)
             if "error" in output.lower():
                 logging.error(f"!! ERROR: Creation of entry failed: {output} !!")
                 continue
             if "skip" in output:
+                i += 1
                 continue
 
             # upload attachments
